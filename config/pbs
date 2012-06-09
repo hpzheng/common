@@ -1,0 +1,4 @@
+queue-name pdb
+max-cores 16
+default-time 300
+timeout 7200
