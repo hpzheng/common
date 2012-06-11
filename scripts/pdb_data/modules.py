@@ -358,6 +358,8 @@ def extract(modules, dirname, fnames):
                 logging.debug("Adding module '%s' from %s", m.name, m.path)
                 modules.append(m)
     else:
+        if dirname == config.pdb_repository_dir:
+            fnames[:] = []
         if 'config' in fnames:
             fnames[:] = ['config']
 
