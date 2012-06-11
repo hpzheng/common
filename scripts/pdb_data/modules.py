@@ -240,18 +240,18 @@ class PdbRepoModule:
             return out
         else:
             return None
-
     def submit_qsub(self, script):
         p = subprocess.Popen('qsub', stdin=subprocess.PIPE, 
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE)
         ######
-        out, err_out = p.communicate()
+        out, err_out = p.communicate(script)
         if p.returncode != 0:
             raise ScriptError, 'Job submission failed: %s' % err_out 
         
-        self.qsub_job_id = qsub_job_id
-
+        self.qsub_job_id = out
+    #def submit_qsub(self, script):
+    #    print script
     def create_local_script(self, dependencies):
         # Local jobs are executed one by one, no need to check pids
         deps = []
@@ -267,8 +267,8 @@ class PdbRepoModule:
     gnu_parallel_template = """
 cd %(workdir)s
 # Create propper sshloginfile from node file
-NODEFILE = ${PBS_JOBID}.nodefile
-sort $PDS_NODEFILE | uniq -c | awk '{print $1"/"$2}' > ${NODEFILE}
+NODEFILE=${PBS_JOBID}.nodefile
+sort $PBS_NODEFILE | uniq -c | awk '{print $1"/"$2}' > ${NODEFILE}
 cat %(code_list)s | parallel -L1 -j%(cores)i --sshloginfile ${NODEFILE} -W%(workdir)s %(script)s {}
 """
     gnu_parallel_local_template = """
@@ -284,7 +284,7 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         kw['workdir'      ] = self.tempdir
         kw['code_list'    ] = os.path.join(self.tempdir, 'code_list')
         kw['script'       ] = self._get_script_path('calculate')
-        kw['env_variables'] = ','.join(['%s=%s' % item for item in self._env])
+        kw['env_variables'] = ','.join(['%s=%s' % item for item in self._env.iteritems()])
 
         output = []
         output.append('#!/bin/bash')
@@ -294,7 +294,7 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
             output.append('PBS -W depend=afterok:%(job_ids)s')
         output.append('#PBS -l nodes=%(cores)i')
         output.append('#PBS -o %(workdir)s/log')
-        output.append('#PBS -V %(env_variables)s')
+        output.append('#PBS -v %(env_variables)s')
 
         output.append(self.gnu_parallel_template)
 
