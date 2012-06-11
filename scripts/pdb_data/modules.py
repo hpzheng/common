@@ -159,6 +159,10 @@ class PdbRepoModule:
         self.outputdir = os.path.join(self.path, 'data')
 
         # Set environment variables
+        PYTHONPATH = os.environ.get('PYTHONPATH', '')
+        if PYTHONPATH: PYTHONPATH += ':'
+        PYTHONPATH += python_module_path
+
         env = {
                 'PDB_REPOSITORY' : config.pdb_repository_dir,
                 'PDB_TEMPDIR'    : self.tempdir,
@@ -167,7 +171,7 @@ class PdbRepoModule:
                 'PDB_MODULE'     : self.name,
                 'PDB_MODULE_DIR' : self.path,
                 'PDB_TIMEOUT'    : str(self.timeout),
-                'PYTHONPATH'     : os.environ['PYTHONPATH'] + ':' + python_module_path
+                'PYTHONPATH'     : PYTHONPATH 
                 }
 
         self._env = env
