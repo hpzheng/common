@@ -283,7 +283,7 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         kw['cores'        ] = self.cores
         kw['workdir'      ] = self.tempdir
         kw['code_list'    ] = os.path.join(self.tempdir, 'code_list')
-        kw['script'       ] = self._get_script_path('calculate')
+        kw['script'       ] = os.path.join(self.tempdir, 'script_wrapper.sh') + ' ' + self._get_script_path('calculate')
         kw['env_variables'] = ','.join(['%s=%s' % item for item in self._env.iteritems()])
 
         output = []
@@ -295,9 +295,14 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         output.append('#PBS -l nodes=%(cores)i')
         output.append('#PBS -o %(workdir)s/log')
         output.append('#PBS -v %(env_variables)s')
-
+	# Create wrapper script to export env variables (parallel is not dealing with that)
+       	 
         output.append(self.gnu_parallel_template)
-
+        wrapper_output = []
+        wrapper_output.append('#!/bin/bash')
+        wrapper_output.extend(["export %s=%s" % item for item in self._env.iteritems()])
+        wrapper_output.append('$1')
+        self._save_temp_file('script_wrapper.sh', '\n'.join(wrapper_output), mode=0700)
         return '\n'.join(output) % kw
     
     def _create_local_serial(self, dependencies):
