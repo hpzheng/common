@@ -341,24 +341,25 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         ###
 
 def extract(modules, dirname, fnames):
+    logger.debug('Walking into %s', dirname)
     if dirname == config.repo_dir:
         fnames.remove('common')
     elif os.path.basename(dirname) == 'config':
         # Check if legitimate config and create module
-        logging.debug('Checking %s', dirname)
+        logger.debug('Checking %s', dirname)
         try:
             m = PdbRepoModule(dirname)
         except (TypeError, ScriptError) as err:
-            logging.exception(err)
+            logger.exception(err)
         else:
             if m.name in [_.name for _ in modules]:
                 logger.error("Duplicate module name '%s'", m.name)
                 logger.info("Conflicting module:\n\t%s", m.path)
             else:
-                logging.debug("Adding module '%s' from %s", m.name, m.path)
+                logger.debug("Adding module '%s' from %s", m.name, m.path)
                 modules.append(m)
     else:
-        if dirname == config.pdb_repository_dir:
+        if dirname in config.dir_blacklist:
             fnames[:] = []
         if 'config' in fnames:
             fnames[:] = ['config']

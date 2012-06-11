@@ -10,6 +10,11 @@ with open(os.path.join(config_dir, 'paths')) as f:
     paths = dict(((l[0], l[1]) for l in (ln.split() for ln in f.readlines())))
 
 pdb_repository_dir = os.path.abspath(paths['pdb-repository'])
+# These directories will be skipped when looking for modules
+
+with open(os.path.join(config_dir, 'dir-blacklist')) as f:
+    dir_blacklist = list((ln.strip() for ln in f.readlines()))
+dir_blacklist.append(pdb_repository_dir)
 
 default={}
 
