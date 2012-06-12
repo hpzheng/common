@@ -282,6 +282,7 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         kw['job_ids'      ] = ':'.join([d.pbs_job_id for d in dependencies])
         kw['cores'        ] = self.cores
         kw['workdir'      ] = self.tempdir
+        kw['logdir'       ] = self.logdir
         kw['code_list'    ] = os.path.join(self.tempdir, 'code_list')
         kw['script'       ] = os.path.join(self.tempdir, 'script_wrapper.sh') + ' ' + self._get_script_path('calculate')
         kw['env_variables'] = ','.join(['%s=%s' % item for item in self._env.iteritems()])
@@ -293,7 +294,8 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         if dependencies:
             output.append('PBS -W depend=afterok:%(job_ids)s')
         output.append('#PBS -l nodes=%(cores)i')
-        output.append('#PBS -o %(workdir)s/log')
+        output.append('#PBS -o %(logdir)s/pbs.out')
+        output.append('#PBS -e %(logdir)s/pbs.err')
         output.append('#PBS -v %(env_variables)s')
 	# Create wrapper script to export env variables (parallel is not dealing with that)
        	 
