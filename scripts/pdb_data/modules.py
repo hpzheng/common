@@ -189,7 +189,7 @@ class PdbRepoModule:
         self.processed = set([i.lower() for i in self.processed])
         # Skip codes in processed and execptions
         self.to_process = self.to_process.difference(self.processed, 
-                                                     self.exceptions)
+                                                     self.exceptions, set(['']))
         # Save pdb codes to be processed 
         self._save_temp_file('code_list', '\n'.join(self.to_process))
 
@@ -301,7 +301,7 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         wrapper_output = []
         wrapper_output.append('#!/bin/bash')
         wrapper_output.extend(["export %s=%s" % item for item in self._env.iteritems()])
-        wrapper_output.append('$1')
+        wrapper_output.append('$@')
         self._save_temp_file('script_wrapper.sh', '\n'.join(wrapper_output), mode=0700)
         return '\n'.join(output) % kw
     
