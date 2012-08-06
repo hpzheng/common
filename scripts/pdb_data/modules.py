@@ -84,7 +84,7 @@ class PdbRepoModule:
                                   ('exceptions', list_file, []),
                                   ('processed', list_file, []),
                                   #('debug', flag_file, 0), #??? no used currently
-                                  #('test', flag_file, 0),
+                                  ('test', flag_file, 0),
                                   ]
     
     _script_filenames_required = [
@@ -140,6 +140,7 @@ class PdbRepoModule:
                                                     (name, scripts_dir)
         
         self.logger = logging.getLogger('module.%s' % self.name)
+        
         # Setup logging
         date_prefix = datetime.datetime.today()\
                                        .replace(microsecond=0)\
@@ -161,6 +162,7 @@ class PdbRepoModule:
         # Set environment variables
         env = {
                 'PDB_REPOSITORY' : config.pdb_repository_dir,
+                'PDB_REPOSITORY_UNZIPPED' : config.pdb_repository_unzipped_dir,
                 'PDB_TEMPDIR'    : self.tempdir,
                 'PDB_LOGDIR'     : self.logdir,
                 'PDB_OUTPUTDIR'  : self.outputdir,
@@ -186,6 +188,8 @@ class PdbRepoModule:
         # Skip codes in processed and execptions
         self.to_process = self.to_process.difference(self.processed, 
                                                      self.exceptions)
+        # If test then use first file
+        self.to_process = tuple(self.to_process)[:1]
         # Save pdb codes to be processed 
         self._save_temp_file('code_list', '\n'.join(self.to_process))
 
@@ -231,6 +235,9 @@ class PdbRepoModule:
             out, err_out = p.communicate()
             logger_err.info(err_out)
             logger_out.info(out)
+            if self.test or self.debug:
+                    self.logger.debug("Script stdout:\n%s", out)
+                    self.logger.debug("Script stderr:\n%s", err_out)
             if p.returncode != 0:
                 raise ScriptError, 'Script %s exited with status %i' % (script_name, p.returncode)
             return out

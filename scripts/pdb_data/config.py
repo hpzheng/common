@@ -10,9 +10,28 @@ with open(os.path.join(config_dir, 'paths')) as f:
     paths = dict(((l[0], l[1]) for l in (ln.split() for ln in f.readlines())))
 
 pdb_repository_dir = os.path.abspath(paths['pdb-repository'])
+pdb_repository_unzipped_dir = os.path.abspath(paths['pdb-repository-unzipped'])
+
+structure_factors_path = os.path.join(pdb_repository_unzipped_dir,
+                                      'data', 
+                                      'structures',
+                                      'all',
+                                      'structure_factors'
+                                      )
+entries_path           = os.path.join(pdb_repository_unzipped_dir,
+                                      'data',
+                                      'structures',
+                                      'all',
+                                      'pdb'
+                                      )
+cifs_path              = os.path.join(pdb_repository_unzipped_dir,
+                                      'data',
+                                      'structures',
+                                      'all',
+                                      'mmCIF'
+                                      )
 
 default={}
-
 # Distributed computing configurations
 with open(os.path.join(config_dir, 'pbs')) as f:
     pbs = dict(((l[0], l[1]) for l in (ln.split() for ln in f.readlines())))
