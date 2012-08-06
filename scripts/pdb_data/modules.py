@@ -160,6 +160,10 @@ class PdbRepoModule:
         self.outputdir = os.path.join(self.path, 'data')
 
         # Set environment variables
+        PYTHONPATH = os.environ.get('PYTHONPATH', '')
+        if PYTHONPATH: PYTHONPATH += ':'
+        PYTHONPATH += python_module_path
+
         env = {
                 'PDB_REPOSITORY' : config.pdb_repository_dir,
                 'PDB_REPOSITORY_UNZIPPED' : config.pdb_repository_unzipped_dir,
@@ -169,7 +173,7 @@ class PdbRepoModule:
                 'PDB_MODULE'     : self.name,
                 'PDB_MODULE_DIR' : self.path,
                 'PDB_TIMEOUT'    : str(self.timeout),
-                'PYTHONPATH'     : os.environ['PYTHONPATH'] + ':' + python_module_path
+                'PYTHONPATH'     : PYTHONPATH 
                 }
 
         self._env = env
@@ -187,7 +191,7 @@ class PdbRepoModule:
         self.processed = set([i.lower() for i in self.processed])
         # Skip codes in processed and execptions
         self.to_process = self.to_process.difference(self.processed, 
-                                                     self.exceptions)
+                                                     self.exceptions, set(['']))
         # If test then use first file
         self.to_process = tuple(self.to_process)[:1]
         # Save pdb codes to be processed 
@@ -243,18 +247,18 @@ class PdbRepoModule:
             return out
         else:
             return None
-
     def submit_qsub(self, script):
         p = subprocess.Popen('qsub', stdin=subprocess.PIPE, 
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE)
         ######
-        out, err_out = p.communicate()
+        out, err_out = p.communicate(script)
         if p.returncode != 0:
             raise ScriptError, 'Job submission failed: %s' % err_out 
         
-        self.qsub_job_id = qsub_job_id
-
+        self.qsub_job_id = out
+    #def submit_qsub(self, script):
+    #    print script
     def create_local_script(self, dependencies):
         # Local jobs are executed one by one, no need to check pids
         deps = []
@@ -270,8 +274,8 @@ class PdbRepoModule:
     gnu_parallel_template = """
 cd %(workdir)s
 # Create propper sshloginfile from node file
-NODEFILE = ${PBS_JOBID}.nodefile
-sort $PDS_NODEFILE | uniq -c | awk '{print $1"/"$2}' > ${NODEFILE}
+NODEFILE=${PBS_JOBID}.nodefile
+sort $PBS_NODEFILE | uniq -c | awk '{print $1"/"$2}' > ${NODEFILE}
 cat %(code_list)s | parallel -L1 -j%(cores)i --sshloginfile ${NODEFILE} -W%(workdir)s %(script)s {}
 """
     gnu_parallel_local_template = """
@@ -285,9 +289,10 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         kw['job_ids'      ] = ':'.join([d.pbs_job_id for d in dependencies])
         kw['cores'        ] = self.cores
         kw['workdir'      ] = self.tempdir
+        kw['logdir'       ] = self.logdir
         kw['code_list'    ] = os.path.join(self.tempdir, 'code_list')
-        kw['script'       ] = self._get_script_path('calculate')
-        kw['env_variables'] = ','.join(['%s=%s' % item for item in self._env])
+        kw['script'       ] = os.path.join(self.tempdir, 'script_wrapper.sh') + ' ' + self._get_script_path('calculate')
+        kw['env_variables'] = ','.join(['%s=%s' % item for item in self._env.iteritems()])
 
         output = []
         output.append('#!/bin/bash')
@@ -296,11 +301,17 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         if dependencies:
             output.append('PBS -W depend=afterok:%(job_ids)s')
         output.append('#PBS -l nodes=%(cores)i')
-        output.append('#PBS -o %(workdir)s/log')
-        output.append('#PBS -V %(env_variables)s')
-
+        output.append('#PBS -o %(logdir)s/pbs.out')
+        output.append('#PBS -e %(logdir)s/pbs.err')
+        output.append('#PBS -v %(env_variables)s')
+	# Create wrapper script to export env variables (parallel is not dealing with that)
+       	 
         output.append(self.gnu_parallel_template)
-
+        wrapper_output = []
+        wrapper_output.append('#!/bin/bash')
+        wrapper_output.extend(["export %s=%s" % item for item in self._env.iteritems()])
+        wrapper_output.append('$@')
+        self._save_temp_file('script_wrapper.sh', '\n'.join(wrapper_output), mode=0700)
         return '\n'.join(output) % kw
     
     def _create_local_serial(self, dependencies):
@@ -348,24 +359,25 @@ cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
         ###
 
 def extract(modules, dirname, fnames):
+    logger.debug('Walking into %s', dirname)
     if dirname == config.repo_dir:
         fnames.remove('common')
     elif os.path.basename(dirname) == 'config':
         # Check if legitimate config and create module
-        logging.debug('Checking %s', dirname)
+        logger.debug('Checking %s', dirname)
         try:
             m = PdbRepoModule(dirname)
         except (TypeError, ScriptError) as err:
-            logging.exception(err)
+            logger.exception(err)
         else:
             if m.name in [_.name for _ in modules]:
                 logger.error("Duplicate module name '%s'", m.name)
                 logger.info("Conflicting module:\n\t%s", m.path)
             else:
-                logging.debug("Adding module '%s' from %s", m.name, m.path)
+                logger.debug("Adding module '%s' from %s", m.name, m.path)
                 modules.append(m)
     else:
-        if dirname == config.pdb_repository_dir:
+        if dirname in config.dir_blacklist:
             fnames[:] = []
         if 'config' in fnames:
             fnames[:] = ['config']
