@@ -15,6 +15,7 @@ pdb_repository_unzipped_dir = os.path.abspath(paths['pdb-repository-unzipped'])
 with open(os.path.join(config_dir, 'dir-blacklist')) as f:
     dir_blacklist = list((ln.strip() for ln in f.readlines()))
 dir_blacklist.append(pdb_repository_dir)
+dir_blacklist.append(pdb_repository_unzipped_dir)
 
 structure_factors_path = os.path.join(pdb_repository_unzipped_dir,
                                       'data', 
