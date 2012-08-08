@@ -83,7 +83,7 @@ class PdbRepoModule:
                                   ('timeout', int_file, config.default['timeout']),
                                   ('exceptions', list_file, []),
                                   ('processed', list_file, []),
-                                  #('debug', flag_file, 0), #??? no used currently
+                                  ('debug', flag_file, 0), #??? no used currently
                                   ('test', flag_file, 0),
                                   ]
     
@@ -193,7 +193,8 @@ class PdbRepoModule:
         self.to_process = self.to_process.difference(self.processed, 
                                                      self.exceptions, set(['']))
         # If test then use first file
-        self.to_process = tuple(self.to_process)[:1]
+        if self.test:
+            self.to_process = tuple(self.to_process)[:1]
         # Save pdb codes to be processed 
         self._save_temp_file('code_list', '\n'.join(self.to_process))
 
