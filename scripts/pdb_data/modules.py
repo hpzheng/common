@@ -277,7 +277,7 @@ cd %(workdir)s
 # Create propper sshloginfile from node file
 NODEFILE=${PBS_JOBID}.nodefile
 sort $PBS_NODEFILE | uniq -c | awk '{print $1"/"$2}' > ${NODEFILE}
-cat %(code_list)s | parallel -L1 -j%(cores)i --sshloginfile ${NODEFILE} -W%(workdir)s %(script)s {}
+cat %(code_list)s | parallel -L1 --sshloginfile ${NODEFILE} -W%(workdir)s %(script)s {}
 """
     gnu_parallel_local_template = """
 cd %(workdir)s
