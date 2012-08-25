@@ -353,6 +353,7 @@ cat %(code_list)s | parallel -L1 --nice 19 -j%(cores)i --wd %(workdir)s %(script
         self.logger.debug('Single job timeout = %s s', self.timeout)
         # Submit job
         ##
+        self._execute('prerun')        
         if mode == 'local':
             script = self.create_local_script(dependencies)
             self._save_temp_file('run', script, mode=0700)
@@ -386,7 +387,7 @@ def extract(modules, dirname, fnames):
         if 'config' in fnames:
             fnames[:] = ['config']
 
-def sort_execution_order(modules):
+def sort_execution_order(modules, check_deps=True):
     sorted = []
     names = {}
     waiting = []
@@ -417,7 +418,12 @@ def sort_execution_order(modules):
                 waiting.remove(module)
                 changes = True
     for module in waiting:
-        logger.error('Unable to resolve dependencies for %s' % module.name)
+        logger.warning('Unable to resolve dependencies for %s' % module.name)
+        if not check_deps:
+            logger.warning('Checking dependencies overriden. Adding module %s for execution', module.name)
+            sorted.append((module, list([names[d] for d in module.dependencies if d in names])))
+        else:
+            logger.error('Skipping module %s due to unmet dependencies', module.name)
     return sorted
 
 def get_all_dependencies(modules):
