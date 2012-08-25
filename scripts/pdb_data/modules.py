@@ -68,6 +68,7 @@ def flag_file(path):
         return None
 
 class PdbRepoModule:
+    __modules__ = {}
     _config_filenames_required = [
                                   ('name', str_file),  
                                   ('description', str_file),
@@ -140,7 +141,9 @@ class PdbRepoModule:
                                                     (name, scripts_dir)
         
         self.logger = logging.getLogger('module.%s' % self.name)
-        
+       	self.logger.debug("Initializing")
+
+        self.__modules__[self.name] = self
         # Setup logging
         date_prefix = datetime.datetime.today()\
                                        .replace(microsecond=0)\
@@ -277,11 +280,11 @@ cd %(workdir)s
 # Create propper sshloginfile from node file
 NODEFILE=${PBS_JOBID}.nodefile
 sort $PBS_NODEFILE | uniq -c | awk '{print $1"/"$2}' > ${NODEFILE}
-cat %(code_list)s | parallel -L1 --sshloginfile ${NODEFILE} -W%(workdir)s %(script)s {}
+cat %(code_list)s | parallel -L1 --nice 19 --sshloginfile ${NODEFILE} --wd %(workdir)s %(script)s {}
 """
     gnu_parallel_local_template = """
 cd %(workdir)s
-cat %(code_list)s | parallel -L1 -j%(cores)i -W%(workdir)s %(script)s {}
+cat %(code_list)s | parallel -L1 --nice 19 -j%(cores)i --wd %(workdir)s %(script)s {}
     """
     
     def _create_pbs_serial(self, dependencies):
@@ -416,3 +419,11 @@ def sort_execution_order(modules):
     for module in waiting:
         logger.error('Unable to resolve dependencies for %s' % module.name)
     return sorted
+
+def get_all_dependencies(modules):
+    r = []
+    for m in modules:
+        deps = list(PdbRepoModule.__modules__[name] for name in m.dependencies)
+        r.extend(deps)
+        r.extend(get_all_dependencies(deps))
+    return r      
