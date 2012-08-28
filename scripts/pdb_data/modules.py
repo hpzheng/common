@@ -260,7 +260,7 @@ class PdbRepoModule:
         if p.returncode != 0:
             raise ScriptError, 'Job submission failed: %s' % err_out 
         
-        self.qsub_job_id = out
+        return out
     #def submit_qsub(self, script):
     #    print script
     def create_local_script(self, dependencies):
@@ -353,14 +353,15 @@ cat %(code_list)s | parallel -L1 --nice 19 -j%(cores)i --wd %(workdir)s %(script
         self.logger.debug('Single job timeout = %s s', self.timeout)
         # Submit job
         ##
-        self._execute('prerun')        
         if mode == 'local':
             script = self.create_local_script(dependencies)
             self._save_temp_file('run', script, mode=0700)
             self._execute('run', self.tempdir)
         elif mode == 'pbs':
             script  = self.create_pbs_script(dependencies) #, self.est_total, numfiles)
-            self.submit_qsub(script)
+            qsub_id = self.submit_qsub(script)
+            self.qsub_job_id = out
+            
         ###
 
 def extract(modules, dirname, fnames):
