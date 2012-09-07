@@ -67,6 +67,10 @@ def flag_file(path):
     else:
         return None
 
+class _dummy_pbs_job(object):
+    def __init__(self, job_id):
+        self.pbs_job_id = job_id
+
 class PdbRepoModule:
     __modules__ = {}
     _config_filenames_required = [
@@ -86,6 +90,8 @@ class PdbRepoModule:
                                   ('processed', list_file, []),
                                   ('debug', flag_file, 0), #??? no used currently
                                   ('test', flag_file, 0),
+                                  ('disabled', flag_file, 0),
+                                  ('strict', flag_file, 0) # Whether it is a strict dependecy
                                   ]
     
     _script_filenames_required = [
@@ -96,6 +102,7 @@ class PdbRepoModule:
     _job_type_to_script = {
             ('pbs',  'serial')  : '_create_pbs_serial',
             ('local','serial')  : '_create_local_serial',
+            ('pbs',  'local')   : '_create_pbs_local'
             }
 
     def __init__(self, config_dir):
@@ -126,7 +133,8 @@ class PdbRepoModule:
                 except Exception as err:
                     raise TypeError, "Error parsing '%s' file in config dir '%s':"\
                                   + " %s" % (name, config_dir, err)
-        
+        if self.disabled:
+            raise TypeError, 'Module is marked as disabled'        
         #for name, file_parser in self._config_filenames_required \
         #                         + self._config_filenames_optional:
         #    path = getattr(self, '_fn_%s' % name)
@@ -215,14 +223,15 @@ class PdbRepoModule:
             print ' ' + '\n '.join(str(getattr(self, name)).split('\n'))
             print
 
-    def _get_script_path(self, script_name):
-            return os.path.join(self.path, 'scripts', script_name)
-
-    def _execute(self, script_name, path=None):
+    def _get_script_path(self, script_name, path=None):
         if path == None:
-            fn = self._get_script_path(script_name)
+            fn = os.path.join(self.path, 'scripts', script_name)
         else:
             fn = os.path.join(path, script_name)
+        return fn
+
+    def _execute(self, script_name, path=None, args=[], input=None):
+        fn = self._get_script_path(script_name, path)
 
         logger = logging.getLogger('module.%s.%s' % (self.name, script_name))
         logger.propagate = False
@@ -239,8 +248,10 @@ class PdbRepoModule:
 
         if os.path.exists(fn):
             self.logger.info('Running %s script', script_name)
-            p = subprocess.Popen(fn, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self.environment)
-            out, err_out = p.communicate()
+            a = [fn]
+            a.extend(args)
+            p = subprocess.Popen(a, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self.environment)
+            out, err_out = p.communicate(input)
             logger_err.info(err_out)
             logger_out.info(out)
             if self.test or self.debug:
@@ -263,17 +274,19 @@ class PdbRepoModule:
         return out
     #def submit_qsub(self, script):
     #    print script
-    def create_local_script(self, dependencies):
+    def create_local_script(self, scrpt, dependencies, **kwargs):
         # Local jobs are executed one by one, no need to check pids
         deps = []
-        return getattr(self, self._job_type_to_script[('local', self.job_type)])(deps)
+        job_type = kwargs.pop('job_type', self.job_type)
+        return getattr(self, self._job_type_to_script[('local', job_type)])(scrpt, deps, **kwargs)
     
-    def create_pbs_script(self, dependencies):
+    def create_pbs_script(self, scrpt, dependencies, **kwargs):
         deps = []
         for item in dependencies:
             if not item.pbs_job_id == None:
                 deps.append(item)
-        return getattr(self, self._job_type_to_script[('pbs', self.job_type)])(deps)
+        job_type = kwargs.pop('job_type', self.job_type)
+        return getattr(self, self._job_type_to_script[('pbs', job_type)])(scrpt, deps, **kwargs)
 
     gnu_parallel_template = """
 cd %(workdir)s
@@ -287,43 +300,67 @@ cd %(workdir)s
 cat %(code_list)s | parallel -L1 --nice 19 -j%(cores)i --wd %(workdir)s %(script)s {}
     """
     
-    def _create_pbs_serial(self, dependencies):
+    def _create_pbs(self, scrpt, dependencies, **kwargs):
         kw = {}
+        kw['job_ids'      ] = ''
+        job_ids_strict = [d.pbs_job_id for d in dependencies if d.strict]
+        job_ids_other  = [d.pbs_job_id for d in dependencies if not d.strict]
+        if job_ids_strict:
+            kw['job_ids'] += 'afterok:%s' % (':'.join(job_ids_stict))
+        if job_ids_other:
+            kw['job_ids'] += ',afterany:%s' % (':'.join(job_ids_strict))
+
         kw['queue_name'   ] = config.default['queue_name']
-        kw['job_ids'      ] = ':'.join([d.pbs_job_id for d in dependencies])
         kw['cores'        ] = self.cores
         kw['workdir'      ] = self.tempdir
         kw['logdir'       ] = self.logdir
         kw['code_list'    ] = os.path.join(self.tempdir, 'code_list')
-        kw['script'       ] = os.path.join(self.tempdir, 'script_wrapper.sh') + ' ' + self._get_script_path('calculate')
+        kw['script'       ] = os.path.join(self.tempdir, 'script_wrapper.sh') + ' ' + self._get_script_path(scrpt)
         kw['env_variables'] = ','.join(['%s=%s' % item for item in self._env.iteritems()])
-
+        kw['core_properties'] = ''  
+              
+        kw.update(kwargs)
+        
         output = []
         output.append('#!/bin/bash')
         output.append('#')
         output.append('#PBS -q %(queue_name)s')
         if dependencies:
-            output.append('PBS -W depend=afterok:%(job_ids)s')
-        output.append('#PBS -l nodes=%(cores)i')
-        output.append('#PBS -o %(logdir)s/pbs.out')
-        output.append('#PBS -e %(logdir)s/pbs.err')
+            output.append('#PBS -W depend=%(job_ids)s')
+        output.append('#PBS -l nodes=%(cores)i'+kw['core_properties'])
+        output.append('#PBS -o %(logdir)s/pbs.'+scrpt+'.out')
+        output.append('#PBS -e %(logdir)s/pbs.'+scrpt+'.err')
         output.append('#PBS -v %(env_variables)s')
-	# Create wrapper script to export env variables (parallel is not dealing with that)
-       	 
+        return output, kw
+
+    def _create_pbs_local(self, scrpt, dependencies, **kwargs):
+        output, kw = self._create_pbs(scrpt, dependencies, **kwargs)
+        output.append('%(script)s %(code_list)s')
+        out = '\n'.join(output) % kw
+        self._save_temp_file('pbs.%s.in' % scrpt, out)
+        return out
+ 
+    def _create_pbs_serial(self, scrpt, dependencies, **kwargs):
+        output, kw = self._create_pbs(scrpt, dependencies, **kwargs)
         output.append(self.gnu_parallel_template)
+	# Create wrapper script to export env variables (parallel is not dealing with that)
         wrapper_output = []
         wrapper_output.append('#!/bin/bash')
         wrapper_output.extend(["export %s=%s" % item for item in self._env.iteritems()])
         wrapper_output.append('$@')
         self._save_temp_file('script_wrapper.sh', '\n'.join(wrapper_output), mode=0700)
-        return '\n'.join(output) % kw
+        out = '\n'.join(output) % kw
+        self._save_temp_file('pbs.%s.in' % scrpt, out)
+        return out
     
-    def _create_local_serial(self, dependencies):
+    def _create_local_serial(self, scrpt, dependencies, **kwargs):
         kw = {}
         kw['cores'     ] = self.cores
         kw['workdir'   ] = self.tempdir
         kw['code_list' ] = os.path.join(self.tempdir, 'code_list')
-        kw['script'    ] = self._get_script_path('calculate')
+        kw['script'    ] = self._get_script_path(scrpt)
+        
+        kw.update(kwargs)
         
         output = []
         output.append('#!/bin/bash')
@@ -354,16 +391,34 @@ cat %(code_list)s | parallel -L1 --nice 19 -j%(cores)i --wd %(workdir)s %(script
         # Submit job
         ##
         if mode == 'local':
-            script = self.create_local_script(dependencies)
+            
+            script = self.create_local_script('calculate', dependencies)
             self._save_temp_file('run', script, mode=0700)
-            self._execute('run', self.tempdir)
+            if self.script_exists('prerun'): self._execute('prerun')
+            try:
+                self._execute('run', self.tempdir)
+            except ScriptError as e:
+                self.logger.error(e.args[0])
+            if self.script_exists('postrun'): self._execute('postrun')
         elif mode == 'pbs':
-            script  = self.create_pbs_script(dependencies) #, self.est_total, numfiles)
+            if self.script_exists('prerun'):
+                prerun_script = self.create_pbs_script('prerun', dependencies, cores=1, core_properties=':local', job_type='local')            
+                qsub_id = self.submit_qsub(prerun_script)
+                dependencies = [_dummy_pbs_job(qsub_id, strict=True)]
+            script  = self.create_pbs_script('calculate', dependencies) #, self.est_total, numfiles)
             qsub_id = self.submit_qsub(script)
-            self.qsub_job_id = out
+            dependencies = [_dummy_pbs_job(qsub_id, strict=False)]
+            if self.script_exists('postrun'):
+                postrun_script = self.create_pbs_script('postrun', dependencies, cores=1, core_properties=':local', job_type='local')            
+                qsub_id = self.submit_qsub(postrun_script)
+                self.qsub_job_id = qsub_id
             
         ###
-
+    def script_exists(self, name, path=None):
+        fpath = self._get_script_path(name, path)
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+            
+        
 def extract(modules, dirname, fnames):
     logger.debug('Walking into %s', dirname)
     if dirname == config.repo_dir:
