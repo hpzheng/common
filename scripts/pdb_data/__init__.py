@@ -31,7 +31,7 @@ class PdbCifFileObject(object):
             )
         self.resolution = None
         try:
-            self.resoultion = float(re.search('_reflns.d_resolution_high *(.*) *', self.cif).group(1))
+            self.resolution = float(re.search('_reflns.d_resolution_high *(.*) *', self.cif).group(1))
         except:
             pass
 
@@ -82,3 +82,6 @@ class PdbPdbFileObject(object):
             self.r_free = float(m.group(1))
         
 data = pdbObjectFactory()
+
+if __name__ == '__main__':
+    print data['2y6u'].resolution

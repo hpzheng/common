@@ -86,8 +86,8 @@ class CCP4Program(Thread):
                     # default
                     self.logger.log(1, "    With defaults")
                     if k.lower() in input:
-                        self.logger.log(1, "      Set to: %s", str(input[k]))
-                        yield (k, str(input[k]))
+                        self.logger.log(1, "      Set to: %s", str(input[k.lower()]))
+                        yield (k, str(input[k.lower()]))
                     else:
                         self.logger.log(1, "      Default: %s", str(d))
                         yield (k, str(d))
