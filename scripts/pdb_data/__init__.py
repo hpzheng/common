@@ -58,6 +58,11 @@ class PdbCifFileObject(object):
         m = re.search('_atom_site_anisotrop', self.cif)
         if m:
             self.aniso = True
+        
+        m = re.search('_computing.structure_refinement.*REFMAC', self.cif)
+        self.refmac = False
+        if m:
+          self.refmac = True
 
 class PdbRepoObject(PdbCifFileObject):
     
@@ -71,15 +76,22 @@ class PdbPdbFileObject(object):
     def __init__(self, fn):
         self.pdb = open(fn).read()
 
-        self.r_factor = False
-        self.r_free   = False
+        self.r_factor = None
+        self.r_free   = None
 
-        m=re.search('  R VALUE.*WORKING SET.*: *([^ ]*)')
+        m=re.search('  R VALUE.*WORKING SET.*: *([^\s]*)', self.pdb)
         if m:
-            self.r_factor = float(m.group(1))
-        m=re.search('  FREE R VALUE *: *([^ ]*)')
+            try:
+                self.r_factor = float(m.group(1))
+            except ValueError:
+                pass
+
+        m=re.search('  FREE R VALUE *: *([^\s]*)', self.pdb)
         if m:
-            self.r_free = float(m.group(1))
+            try:
+                self.r_free = float(m.group(1))
+            except ValueError:
+                pass
         
 data = pdbObjectFactory()
 
