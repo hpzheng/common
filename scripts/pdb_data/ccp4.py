@@ -272,13 +272,14 @@ class CCP4_REFMAC(CCP4Program):
 
                 ]),
             ('NCYC', 0),
+            'NCSR',
             ('SCAL', [
                 ('type' , 'SIMP'),
                 ('LSSC', ''),
                 ('ANISO', ''),
                 ('EXPE', ''),
                 ]),
-            ('SOLVENT', 'YES'),
+            ('SOLVENT', 'YES'), #, ''),
             ('WEIGHT', 'AUTO'),
             ('MONITOR', 'NONE'),
             'LABIN',
@@ -294,6 +295,24 @@ class CCP4_REFMAC(CCP4Program):
         self.data = []
         for line in data:
             self.data.append(dict(zip(header, line)))
+
+class CCP4_REFMAC_SOLVENT(CCP4_REFMAC):
+    io       = [
+            'XYZIN',
+            'HKLIN',
+            ]
+    keywords = [
+            ('SOLVENT', 'OPTIMISE'),
+            'LABIN',
+            'LABOUT',
+            ]
+
+    def parse(self):
+        s = re.search("\*\*\*\*          Minimum R free and corresponding solvent parameters           \*\*\*\*.*Rfree *= *([.\d]*).*VDW probe *= *([.\d]*).*ION probe *= *([.\d]*).*Shrinkage *= *([.\d]*)",
+                  self.output, re.DOTALL)
+        self.vdw_probe = s.group(1)
+        self.ion_probe = s.group(2)
+        self.shrinkage = s.group(3)
 
 class CCP4_REFMAC_RESTRAINS(CCP4_REFMAC):
     io = ['XYZIN', 'XYZOUT', 'LIBIN', 'LIBOUT']
