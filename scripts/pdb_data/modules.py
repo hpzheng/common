@@ -68,8 +68,9 @@ def flag_file(path):
         return None
 
 class _dummy_pbs_job(object):
-    def __init__(self, job_id):
-        self.pbs_job_id = job_id
+    def __init__(self, job_id, strict=False):
+        self.qsub_job_id = job_id
+        self.strict = strict
 
 class PdbRepoModule:
     __modules__ = {}
@@ -283,7 +284,7 @@ class PdbRepoModule:
     def create_pbs_script(self, scrpt, dependencies, **kwargs):
         deps = []
         for item in dependencies:
-            if not item.pbs_job_id == None:
+            if not item.qsub_job_id == None:
                 deps.append(item)
         job_type = kwargs.pop('job_type', self.job_type)
         return getattr(self, self._job_type_to_script[('pbs', job_type)])(scrpt, deps, **kwargs)
@@ -302,13 +303,14 @@ cat %(code_list)s | parallel -L1 --nice 19 -j%(cores)i --wd %(workdir)s %(script
     
     def _create_pbs(self, scrpt, dependencies, **kwargs):
         kw = {}
-        kw['job_ids'      ] = ''
-        job_ids_strict = [d.pbs_job_id for d in dependencies if d.strict]
-        job_ids_other  = [d.pbs_job_id for d in dependencies if not d.strict]
+        job_ids_strict = [d.qsub_job_id for d in dependencies if d.strict]
+        job_ids_other  = [d.qsub_job_id for d in dependencies if not d.strict]
+        job_ids = []
         if job_ids_strict:
-            kw['job_ids'] += 'afterok:%s' % (':'.join(job_ids_stict))
+            job_ids.append('afterok:%s' % (':'.join(job_ids_strict)))
         if job_ids_other:
-            kw['job_ids'] += ',afterany:%s' % (':'.join(job_ids_strict))
+            job_ids.append('afterany:%s' % (':'.join(job_ids_other)))
+        kw['job_ids'] = ','.join(job_ids)
 
         kw['queue_name'   ] = config.default['queue_name']
         kw['cores'        ] = self.cores
@@ -374,7 +376,7 @@ cat %(code_list)s | parallel -L1 --nice 19 -j%(cores)i --wd %(workdir)s %(script
         numfiles = len(self.to_process)
         if numfiles == 0:
             self.logger.info('No pdbs to process. Finishing')
-            self.pbs_job_id = None
+            self.qsub_job_id = None
             return
         self.logger.info('%i pdbs to process.', numfiles)
 
@@ -407,6 +409,7 @@ cat %(code_list)s | parallel -L1 --nice 19 -j%(cores)i --wd %(workdir)s %(script
                 dependencies = [_dummy_pbs_job(qsub_id, strict=True)]
             script  = self.create_pbs_script('calculate', dependencies) #, self.est_total, numfiles)
             qsub_id = self.submit_qsub(script)
+            self.qsub_job_id = qsub_id
             dependencies = [_dummy_pbs_job(qsub_id, strict=False)]
             if self.script_exists('postrun'):
                 postrun_script = self.create_pbs_script('postrun', dependencies, cores=1, core_properties=':local', job_type='local')            
