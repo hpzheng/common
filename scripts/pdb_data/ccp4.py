@@ -86,8 +86,8 @@ class CCP4Program(Thread):
                     # default
                     self.logger.log(1, "    With defaults")
                     if k.lower() in input:
-                        self.logger.log(1, "      Set to: %s", str(input[k]))
-                        yield (k, str(input[k]))
+                        self.logger.log(1, "      Set to: %s", str(input[k.lower()]))
+                        yield (k, str(input[k.lower()]))
                     else:
                         self.logger.log(1, "      Default: %s", str(d))
                         yield (k, str(d))
@@ -275,13 +275,14 @@ class CCP4_REFMAC(CCP4Program):
 
                 ]),
             ('NCYC', 0),
+            'NCSR',
             ('SCAL', [
                 ('type' , 'SIMP'),
                 ('LSSC', ''),
                 ('ANISO', ''),
                 ('EXPE', ''),
                 ]),
-            ('SOLVENT', 'YES'),
+            ('SOLVENT', 'YES'), #, ''),
             ('WEIGHT', 'AUTO'),
             ('MONITOR', 'NONE'),
             'LABIN',
@@ -302,6 +303,24 @@ class CCP4_REFMAC(CCP4Program):
         # Refmac leaves lots of temporary files in tmp...
         for i in glob.glob('/tmp/%s/refmac5_*%s*' % (getpass.getuser(), self.p1.pid)):
             os.remove(i)
+
+class CCP4_REFMAC_SOLVENT(CCP4_REFMAC):
+    io       = [
+            'XYZIN',
+            'HKLIN',
+            ]
+    keywords = [
+            ('SOLVENT', 'OPTIMISE'),
+            'LABIN',
+            'LABOUT',
+            ]
+
+    def parse(self):
+        s = re.search("\*\*\*\*          Minimum R free and corresponding solvent parameters           \*\*\*\*.*Rfree *= *([.\d]*).*VDW probe *= *([.\d]*).*ION probe *= *([.\d]*).*Shrinkage *= *([.\d]*)",
+                  self.output, re.DOTALL)
+        self.vdw_probe = s.group(1)
+        self.ion_probe = s.group(2)
+        self.shrinkage = s.group(3)
 
 class CCP4_REFMAC_RESTRAINS(CCP4_REFMAC):
     io = ['XYZIN', 'XYZOUT', 'LIBIN', 'LIBOUT']
