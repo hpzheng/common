@@ -1,4 +1,4 @@
-import subprocess, logging, re
+import subprocess, logging, re, os, glob, getpass
 import collections
 from threading import Thread
 l = logging.getLogger('ccp4')
@@ -112,7 +112,10 @@ class CCP4Program(Thread):
                     self.logger.critical(self.stdout)
                 return False
             self.parse()
+            self.cleanup()
         return True
+    def cleanup(self):
+        pass
 
     def parse(self):
         self.data = self.output
@@ -294,6 +297,11 @@ class CCP4_REFMAC(CCP4Program):
         self.data = []
         for line in data:
             self.data.append(dict(zip(header, line)))
+
+    def cleanup(self):
+        # Refmac leaves lots of temporary files in tmp...
+        for i in glob.glob('/tmp/%s/refmac5_*%s*' % (getpass.getuser(), self.p1.pid)):
+            os.remove(i)
 
 class CCP4_REFMAC_RESTRAINS(CCP4_REFMAC):
     io = ['XYZIN', 'XYZOUT', 'LIBIN', 'LIBOUT']
