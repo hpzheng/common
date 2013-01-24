@@ -107,6 +107,9 @@ class CCP4Program(Thread):
             if status != 0: 
                 if not self._suppres_errors:
                     self.logger.critical("ERROR OCCURED:")
+                    self.logger.critical("CMD: %s", self.cmd)
+                    self.logger.critical("IN: %s", input)
+                    self.logger.critical("STDERR:")
                     self.logger.critical(self.stderr)
                     self.logger.critical("OUTPUT:")
                     self.logger.critical(self.stdout)
@@ -301,7 +304,10 @@ class CCP4_REFMAC(CCP4Program):
 
     def cleanup(self):
         # Refmac leaves lots of temporary files in tmp...
-        for i in glob.glob('/tmp/%s/refmac5_*%s*' % (getpass.getuser(), self.p1.pid)):
+        self.logger.debug('Cleaning after refmac');
+        pattern = '/tmp/%s/refmac5_*%s*' % (getpass.getuser(), self.p1.pid)
+        self.logger.debug('Removing files that match: %s', pattern)
+        for i in glob.glob(pattern):
             os.remove(i)
 
 class CCP4_REFMAC_SOLVENT(CCP4_REFMAC):
@@ -373,17 +379,75 @@ class CCP4_CIF2MTZ(CCP4Program):
         if 'FREE' in columns and columns['FREE'] == 'I':
             self.has_free = True
 
+class CCP4_MTZDUMP(CCP4Program):
+    prg_name = 'mtzdump'
+    io       = [ 'HKLIN' ]
+    keywords = [
+                ['STATS', 'NBIN 20'],
+               ]
+                
+    def parse(self):
+        self.d_min, self.d_max, self.res_min, self.res_max = \
+           re.findall('Resolution Range.*?([\d.]+) +([\d.]+) +\( *([\d.]+)[^\d]+([\d.]+)', self.output, re.DOTALL)[0]
+        self.bins = {}
+        for d_min, d_max, partial_stats, bin_i, n_refl in re.findall('PARTIAL FILE STATISTICS for resolution range *([\d.]+)[^\d]*([\d.]+)(.*?)No. of reflections used in partial statistics for resolution bin *(\d+) *= *(\d+)', self.output, re.DOTALL):
+            bin_i = int(bin_i)
+            self.bins[bin_i] = {}
+            for col in re.findall('.{4,4} *([-\d.]+) +([-\d.]+) +(\d+) +([-\d.]+) +([-\d.]+) +([-\d.]+) +([-\d.]+) +([-\d.]+) +([^\s]*)', partial_stats):
+                label = col[8]
+                data  = {}
+                data['min']          = float(col[0])
+                data['max']          = float(col[1])
+                data['missing']      = float(col[2])
+                data['completeness'] = float(col[3])
+                data['mean']         = float(col[4])
+                data['mean_abs']     = float(col[5])
+                data['res_low']      = float(col[6])
+                data['res_high']     = float(col[7])
+
+                self.bins[bin_i][label] = data
+            self.bins[bin_i]['d_min'] = d_min
+            self.bins[bin_i]['d_max'] = d_min
+            self.bins[bin_i]['n_reflections'] = n_refl
+        d_min, d_max, stats, n_refl = re.findall('OVERALL FILE STATISTICS for resolution range *([\d.]+)[^\d]*([\d.]+)(.*?)No. of reflections used in FILE STATISTICS +(\d+)', self.output, re.DOTALL)[0]
+        self.bins[0] = {} 
+        for col in re.findall('.{9,9} *([-\d.]+) +([-\d.]+) +(\d+) +([-\d.]+) +([-\d.]+) +([-\d.]+) +([-\d.]+) +([-\d.]+) +([^\s]*) +([^\s]*)', stats):
+            label = col[9]
+            data  = {}
+            data['min']          = float(col[0])
+            data['max']          = float(col[1])
+            data['missing']      = float(col[2])
+            data['completeness'] = float(col[3])
+            data['mean']         = float(col[4])
+            data['mean_abs']     = float(col[5])
+            data['res_low']      = float(col[6])
+            data['res_high']     = float(col[7])
+
+            self.bins[0][label] = data
+        self.bins[0]['d_min'] = d_min
+        self.bins[0]['d_max'] = d_min
+        self.bins[0]['n_reflections'] = n_refl
+    
+class CCP4_TRUNCATE(CCP4Program):
+    prg_name = 'truncate'
+    io       = ['HKLIN', 'HKLOUT']
+    keywords = [
+                "LABIN",
+                "LABOUT",
+            	('NOHARVEST', ''),
+               ]
+
 class CProgram(CCP4Program):
     arguments = []
 
     def __init__(self, cmdline={}):
-        self.io = ['-%s' % a for a in arguments]
+        self.io = ['-%s' % a for a in self.arguments]
         c = dict(('-%s' % k, v) for k,v in cmdline.items())
         super(CProgram, self).__init__(cmdline=c)
 
-class C_TRUNCATE(CCP4Program):
+class C_TRUNCATE(CProgram):
     prg_name = 'ctruncate'
-    arguments = [ 'mtzin', 'mtzout', 'colin', 'colano' ]
+    arguments = [ 'mtzin', 'mtzout', 'colin', 'colano', 'colout' ]
 
 class CCP4_TLSEXTRACT(CCP4Program):
     prg_name = 'tlsextract'
