@@ -367,6 +367,7 @@ cat %(code_list)s | parallel -L1 --nice 19 -j%(cores)i --wd %(workdir)s %(script
         output = []
         output.append('#!/bin/bash')
         output.append('#')
+        output.extend(["export %s=%s" % item for item in self._env.iteritems()])
         output.append(self.gnu_parallel_local_template)
         
         return '\n'.join(output) % kw
