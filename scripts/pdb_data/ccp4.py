@@ -30,6 +30,7 @@ class CCP4Program(Thread):
     keywords = []
 
     _suppres_errors = False
+    io_positional = False
     
     def __init__(self, cmdline={}, input={}, dry_run=False):
         # Generate command line
@@ -39,6 +40,9 @@ class CCP4Program(Thread):
             io = cmdline.get(n, None)
             if io:
                 ios.extend([n, io])
+        if self.io_positional:
+            ios.extend(cmdline.get('', '').split())
+
         self.cmdline_kws = cmdline
         self.input_kws   = input
         self.cmd = [ 'timelimit', self.prg_name ] 
@@ -444,8 +448,10 @@ class CProgram(CCP4Program):
     arguments = []
 
     def __init__(self, cmdline={}):
-        self.io = ['-%s' % a for a in self.arguments]
-        c = dict(('-%s' % k, v) for k,v in cmdline.items())
+        self.io = ['-%s' % a for a in self.arguments if a != '']
+        c = dict(('-%s' % k, v) for k,v in cmdline.items() if k != '')
+        if '' in cmdline:
+            c[''] = cmdline['']
         super(CProgram, self).__init__(cmdline=c)
 
 class C_TRUNCATE(CProgram):
@@ -472,11 +478,15 @@ class KeyValueProgram(CCP4Program):
             inpt.append('='.join(line))
         return inpt
 
+
 class CCP4_EDSTATS(KeyValueProgram):
     prg_name = 'edstats'
     io = [ 'XYZIN', 'MAPIN1', 'MAPIN2', 'OUT']
     keywords = ['RESL', 'RESH']
 
+    
 if __name__ == '__main__':
     logging.basicConfig(level=0,)
     CCP4_REFMAC({'XYZIN':'A'}, {'REFI' : {'bref':'MIXE'}}, dry_run=True)
+
+
