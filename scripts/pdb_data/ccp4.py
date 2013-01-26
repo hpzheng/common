@@ -44,13 +44,8 @@ class CCP4Program(Thread):
         self.cmd = [ 'timelimit', self.prg_name ] 
         self.cmd.extend(ios)
         self.logger  = logging.getLogger('ccp4.%s' % (self.prg_name))
-
-        # Generate input file
-        inpt = []
-        for line in self._kw_parse(self.keywords, input):
-            inpt.append(' '.join(line))
-        inpt.append('end')
-        self.input = inpt
+        
+        self.input = self.create_input(self.keywords, input)
         
         super(CCP4Program, self).__init__()
         self.name = self.prg_name 
@@ -58,7 +53,15 @@ class CCP4Program(Thread):
         self.logger.debug("Cmdline: %s", self.cmd)
         self.logger.debug("Input  : %s", self.input)
         self.dry_run = dry_run
-   
+    
+    def create_input(self, kw, input):
+        # Generate input file
+        inpt = []
+        for line in self._kw_parse(kw, input):
+            inpt.append(' '.join(line))
+        inpt.append('end')
+        return inpt
+
     def _kw_parse(self, kw, input):
         input = dict((key.lower(), value) for key, value in input.iteritems())
         
@@ -137,10 +140,10 @@ class CCP4_FFT(CCP4Program):
     prg_name = 'fft'
     io       = ['HKLIN',
                 'MAPOUT',
-                'ABCOEFFS'
                 ]
-    # Not finished....
-    keywords = ['LABIN']
+    keywords = ['LABIN',
+                'NXYZL', 'ASU',
+                'GRID']
     
 class CCP4_MAPMASK(CCP4Program):
     prg_name = 'mapmask'
@@ -460,6 +463,19 @@ class CCP4_TLSEXTRACT(CCP4Program):
             self.has_tls = True
         else:
             self.has_tls = False
+
+class KeyValueProgram(CCP4Program):
+    def create_input(self, kw, input):
+        # Generate input file
+        inpt = []
+        for line in self._kw_parse(kw, input):
+            inpt.append('='.join(line))
+        return inpt
+
+class CCP4_EDSTATS(KeyValueProgram):
+    prg_name = 'edstats'
+    io = [ 'XYZIN', 'MAPIN1', 'MAPIN2', 'OUT']
+    keywords = ['RESL', 'RESH']
 
 if __name__ == '__main__':
     logging.basicConfig(level=0,)
